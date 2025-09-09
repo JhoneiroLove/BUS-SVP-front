@@ -31,14 +31,14 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   return (
     <div className="min-h-screen bg-orange-50">
       <nav className="bg-orange-600 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-between items-center h-16">
+        <div className="px-4 mx-auto max-w-7xl">
+          <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-2">
-              <Bus className="h-8 w-8 text-white" />
-              <span className="text-white text-xl font-bold">BusSystem</span>
+              <Bus className="w-8 h-8 text-white" />
+              <span className="text-xl font-bold text-white">Bus-SVP</span>
             </div>
             
-            <div className="hidden md:flex items-center space-x-8">
+            <div className="items-center hidden space-x-8 md:flex">
               {menuItems.map(item => (
                 <button
                   key={item.id}
@@ -54,21 +54,21 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
 
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <User className="h-5 w-5 text-white" />
-                <span className="text-white text-sm">{user?.name}</span>
+                <User className="w-5 h-5 text-white" />
+                <span className="text-sm text-white">{user?.name}</span>
               </div>
               <button
                 onClick={logout}
-                className="text-white hover:text-orange-200 transition-colors"
+                className="text-white transition-colors hover:text-orange-200"
               >
-                <LogOut className="h-5 w-5" />
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="px-4 py-8 mx-auto max-w-7xl">
         {children}
       </main>
     </div>
