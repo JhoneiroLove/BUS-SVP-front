@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User } from '../types';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { User, LoginResponse } from '../types';
+import api from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -11,36 +12,71 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const mockUsers: User[] = [
-  { id: '1', email: 'admin@bus.com', name: 'Admin', role: 'admin' },
-  { id: '2', email: 'user@bus.com', name: 'Usuario', role: 'user' }
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    const foundUser = mockUsers.find(u => u.email === email);
-    if (foundUser) {
-      setUser(foundUser);
-      return true;
+  // Check for existing token on app start
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+      }
     }
-    return false;
+  }, []);
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const response = await api.post<LoginResponse>('/auth/login', {
+        email,
+        password
+      });
+
+      const { access_token, user: userData } = response.data;
+      
+      // Store token and user data
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      setUser(userData);
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
   };
 
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
-    const newUser: User = {
-      id: Date.now().toString(),
-      email,
-      name,
-      role: 'user'
-    };
-    mockUsers.push(newUser);
-    setUser(newUser);
-    return true;
+    try {
+      const response = await api.post<LoginResponse>('/auth/register', {
+        name,
+        email,
+        password
+      });
+
+      const { access_token, user: userData } = response.data;
+      
+      // Store token and user data
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      setUser(userData);
+      return true;
+    } catch (error) {
+      console.error('Registration failed:', error);
+      return false;
+    }
   };
 
   const logout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
     setUser(null);
   };
 
