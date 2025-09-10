@@ -14,9 +14,10 @@ import { BusManagement } from "./features/admin/BusManagement";
 import { RouteManagement } from "./features/admin/RouteManagement";
 import { ScheduleManagement } from "./features/admin/ScheduleManagement";
 import { UserManagement } from "./features/admin/UserManagement";
+import { reservationsService } from "./shared/services/reservations";
 
 function AppContent() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [currentPage, setCurrentPage] = useState("routes");
   const [showRegister, setShowRegister] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(
@@ -41,9 +42,27 @@ function AppContent() {
     setCurrentPage("routes");
   };
 
-  const handleReservationComplete = () => {
-    setSelectedScheduleId(null);
-    setCurrentPage("reservations");
+  const handleReservationComplete = async (seatNumber: number, scheduleId: string) => {
+    try {
+      console.log(`Creando reserva: Asiento ${seatNumber}, Horario ${scheduleId}`);
+      
+      // Crear reserva real usando el servicio
+      const reservationData = {
+        user_id: user?.id || "1", // Usar el ID del usuario autenticado
+        schedule_id: scheduleId,
+        seat_number: seatNumber
+      };
+      
+      const reservation = await reservationsService.createReservation(reservationData);
+      
+      alert(`¡Reserva confirmada!\nCódigo: ${reservation.reservation_code}\nAsiento: ${seatNumber}\nPrecio: S/ ${reservation.price}`);
+      
+      setSelectedScheduleId(null);
+      setCurrentPage("reservations");
+    } catch (error) {
+      console.error('Error creating reservation:', error);
+      alert('Error al crear la reserva. Por favor, inténtalo de nuevo.');
+    }
   };
 
   const renderContent = () => {
@@ -54,9 +73,9 @@ function AppContent() {
       case "seat-selection":
         return selectedScheduleId ? (
           <SeatSelection
-            scheduleId={selectedScheduleId}
+            routeId={selectedScheduleId}
             onBack={handleBackToRoutes}
-            onComplete={handleReservationComplete}
+            onConfirm={handleReservationComplete}
           />
         ) : (
           <RouteSearch onSelectSchedule={handleSelectSchedule} />

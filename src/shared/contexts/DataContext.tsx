@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Company, Bus, Route, Schedule, Reservation, User } from '../types';
+import { companiesService } from '../services/companies';
+import { routesService } from '../services/routes';
+import { usersService } from '../services/users';
+import { reservationsService } from '../services/reservations';
 
 interface DataContextType {
   companies: Company[];
@@ -8,174 +12,214 @@ interface DataContextType {
   schedules: Schedule[];
   reservations: Reservation[];
   users: User[];
-  addReservation: (reservation: Omit<Reservation, 'id' | 'createdAt'>) => void;
+  loading: boolean;
+  error: string | null;
+  loadData: () => Promise<void>;
+  addReservation: (reservation: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>) => void;
   cancelReservation: (id: string) => void;
-  addCompany: (company: Omit<Company, 'id'>) => void;
-  updateCompany: (id: string, company: Omit<Company, 'id'>) => void;
+  addCompany: (company: Omit<Company, 'id' | 'created_at' | 'updated_at'>) => void;
+  updateCompany: (id: string, company: Omit<Company, 'id' | 'created_at' | 'updated_at'>) => void;
   deleteCompany: (id: string) => void;
-  addBus: (bus: Omit<Bus, 'id'>) => void;
-  updateBus: (id: string, bus: Omit<Bus, 'id'>) => void;
+  addBus: (bus: Omit<Bus, 'id' | 'created_at' | 'updated_at'>) => void;
+  updateBus: (id: string, bus: Omit<Bus, 'id' | 'created_at' | 'updated_at'>) => void;
   deleteBus: (id: string) => void;
-  addRoute: (route: Omit<Route, 'id'>) => void;
-  updateRoute: (id: string, route: Omit<Route, 'id'>) => void;
+  addRoute: (route: Omit<Route, 'id' | 'created_at' | 'updated_at'>) => void;
+  updateRoute: (id: string, route: Omit<Route, 'id' | 'created_at' | 'updated_at'>) => void;
   deleteRoute: (id: string) => void;
-  addSchedule: (schedule: Omit<Schedule, 'id'>) => void;
-  updateSchedule: (id: string, schedule: Omit<Schedule, 'id'>) => void;
+  addSchedule: (schedule: Omit<Schedule, 'id' | 'created_at' | 'updated_at'>) => void;
+  updateSchedule: (id: string, schedule: Omit<Schedule, 'id' | 'created_at' | 'updated_at'>) => void;
   deleteSchedule: (id: string) => void;
-  addUser: (user: Omit<User, 'id'>) => void;
-  updateUser: (id: string, user: Omit<User, 'id'>) => void;
+  addUser: (user: Omit<User, 'id' | 'created_at' | 'updated_at'>) => void;
+  updateUser: (id: string, user: Omit<User, 'id' | 'created_at' | 'updated_at'>) => void;
   deleteUser: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const initialCompanies: Company[] = [
-  { id: '1', name: 'TransAndina', phone: '+51 999 888 777', email: 'info@transandina.com' }
-];
-
-const initialBuses: Bus[] = [
-  { id: '1', companyId: '1', plateNumber: 'ABC-123', capacity: 40, model: 'Mercedes Benz' }
-];
-
-const initialRoutes: Route[] = [
-  { id: '1', companyId: '1', origin: 'Lima', destination: 'Cusco', price: 80, duration: '22h' }
-];
-
-const initialSchedules: Schedule[] = [
-  { 
-    id: '1', 
-    routeId: '1', 
-    busId: '1', 
-    departureTime: '20:00', 
-    arrivalTime: '18:00', 
-    date: '2025-01-15', 
-    availableSeats: 38 
-  }
-];
-
-const initialUsers: User[] = [
-  { id: '1', email: 'admin@bus.com', name: 'Admin', role: 'admin' },
-  { id: '2', email: 'user@bus.com', name: 'Usuario', role: 'user' }
-];
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [companies, setCompanies] = useState<Company[]>(initialCompanies);
-  const [buses, setBuses] = useState<Bus[]>(initialBuses);
-  const [routes, setRoutes] = useState<Route[]>(initialRoutes);
-  const [schedules, setSchedules] = useState<Schedule[]>(initialSchedules);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [buses, setBuses] = useState<Bus[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const addReservation = (reservation: Omit<Reservation, 'id' | 'createdAt'>) => {
-    const newReservation: Reservation = {
-      ...reservation,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString()
-    };
-    setReservations(prev => [...prev, newReservation]);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const [companiesData, routesData, usersData] = await Promise.all([
+        companiesService.getAllCompanies(),
+        routesService.getAllRoutes(),
+        usersService.getAllUsers()
+      ]);
+      
+      setCompanies(companiesData);
+      setRoutes(routesData);
+      setUsers(usersData);
+      
+      // Por ahora, buses, schedules y reservations se cargan por separado cuando se necesitan
+      setBuses([]);
+      setSchedules([]);
+      setReservations([]);
+      
+    } catch (err) {
+      setError('Error al cargar los datos');
+      console.error('Error loading data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reservations
+  const addReservation = (reservation: Omit<Reservation, 'id' | 'created_at' | 'updated_at'>) => {
+    // Esta función se maneja directamente en los componentes usando el servicio
+    console.log('Reservation added:', reservation);
   };
 
   const cancelReservation = (id: string) => {
-    setReservations(prev => 
-      prev.map(r => r.id === id ? { ...r, status: 'cancelled' } : r)
-    );
+    setReservations(prev => prev.filter(r => r.id !== id));
   };
 
-  // Company management
-  const addCompany = (company: Omit<Company, 'id'>) => {
-    const newCompany: Company = { ...company, id: Date.now().toString() };
-    setCompanies(prev => [...prev, newCompany]);
+  // Companies
+  const addCompany = async (company: Omit<Company, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const newCompany = await companiesService.createCompany(company);
+      setCompanies(prev => [...prev, newCompany]);
+    } catch (err) {
+      console.error('Error creating company:', err);
+    }
   };
 
-  const updateCompany = (id: string, company: Omit<Company, 'id'>) => {
-    setCompanies(prev => prev.map(c => c.id === id ? { ...company, id } : c));
+  const updateCompany = async (id: string, company: Omit<Company, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const updatedCompany = await companiesService.updateCompany(id, company);
+      setCompanies(prev => prev.map(c => c.id === id ? updatedCompany : c));
+    } catch (err) {
+      console.error('Error updating company:', err);
+    }
   };
 
-  const deleteCompany = (id: string) => {
-    setCompanies(prev => prev.filter(c => c.id !== id));
+  const deleteCompany = async (id: string) => {
+    try {
+      await companiesService.deleteCompany(id);
+      setCompanies(prev => prev.filter(c => c.id !== id));
+    } catch (err) {
+      console.error('Error deleting company:', err);
+    }
   };
 
-  // Bus management
-  const addBus = (bus: Omit<Bus, 'id'>) => {
-    const newBus: Bus = { ...bus, id: Date.now().toString() };
-    setBuses(prev => [...prev, newBus]);
+  // Routes
+  const addRoute = async (route: Omit<Route, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const newRoute = await routesService.createRoute(route);
+      setRoutes(prev => [...prev, newRoute]);
+    } catch (err) {
+      console.error('Error creating route:', err);
+    }
   };
 
-  const updateBus = (id: string, bus: Omit<Bus, 'id'>) => {
-    setBuses(prev => prev.map(b => b.id === id ? { ...bus, id } : b));
+  const updateRoute = async (id: string, route: Omit<Route, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const updatedRoute = await routesService.updateRoute(id, route);
+      setRoutes(prev => prev.map(r => r.id === id ? updatedRoute : r));
+    } catch (err) {
+      console.error('Error updating route:', err);
+    }
+  };
+
+  const deleteRoute = async (id: string) => {
+    try {
+      await routesService.deleteRoute(id);
+      setRoutes(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error('Error deleting route:', err);
+    }
+  };
+
+  // Users
+  const addUser = (user: Omit<User, 'id' | 'created_at' | 'updated_at'>) => {
+    // Esta función se maneja directamente en los componentes usando el servicio
+    console.log('User added:', user);
+  };
+
+  const updateUser = async (id: string, user: Omit<User, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const updatedUser = await usersService.updateUser(id, user);
+      setUsers(prev => prev.map(u => u.id === id ? updatedUser : u));
+    } catch (err) {
+      console.error('Error updating user:', err);
+    }
+  };
+
+  const deleteUser = async (id: string) => {
+    try {
+      await usersService.deleteUser(id);
+      setUsers(prev => prev.filter(u => u.id !== id));
+    } catch (err) {
+      console.error('Error deleting user:', err);
+    }
+  };
+
+  // Buses, Schedules - Por ahora solo mock functions
+  const addBus = (bus: Omit<Bus, 'id' | 'created_at' | 'updated_at'>) => {
+    console.log('Bus added:', bus);
+  };
+
+  const updateBus = (id: string, bus: Omit<Bus, 'id' | 'created_at' | 'updated_at'>) => {
+    console.log('Bus updated:', id, bus);
   };
 
   const deleteBus = (id: string) => {
     setBuses(prev => prev.filter(b => b.id !== id));
   };
 
-  // Route management
-  const addRoute = (route: Omit<Route, 'id'>) => {
-    const newRoute: Route = { ...route, id: Date.now().toString() };
-    setRoutes(prev => [...prev, newRoute]);
+  const addSchedule = (schedule: Omit<Schedule, 'id' | 'created_at' | 'updated_at'>) => {
+    console.log('Schedule added:', schedule);
   };
 
-  const updateRoute = (id: string, route: Omit<Route, 'id'>) => {
-    setRoutes(prev => prev.map(r => r.id === id ? { ...route, id } : r));
-  };
-
-  const deleteRoute = (id: string) => {
-    setRoutes(prev => prev.filter(r => r.id !== id));
-  };
-
-  // Schedule management
-  const addSchedule = (schedule: Omit<Schedule, 'id'>) => {
-    const newSchedule: Schedule = { ...schedule, id: Date.now().toString() };
-    setSchedules(prev => [...prev, newSchedule]);
-  };
-
-  const updateSchedule = (id: string, schedule: Omit<Schedule, 'id'>) => {
-    setSchedules(prev => prev.map(s => s.id === id ? { ...schedule, id } : s));
+  const updateSchedule = (id: string, schedule: Omit<Schedule, 'id' | 'created_at' | 'updated_at'>) => {
+    console.log('Schedule updated:', id, schedule);
   };
 
   const deleteSchedule = (id: string) => {
     setSchedules(prev => prev.filter(s => s.id !== id));
   };
 
-  // User management
-  const addUser = (user: Omit<User, 'id'>) => {
-    const newUser: User = { ...user, id: Date.now().toString() };
-    setUsers(prev => [...prev, newUser]);
-  };
-
-  const updateUser = (id: string, user: Omit<User, 'id'>) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...user, id } : u));
-  };
-
-  const deleteUser = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+  const value: DataContextType = {
+    companies,
+    buses,
+    routes,
+    schedules,
+    reservations,
+    users,
+    loading,
+    error,
+    loadData,
+    addReservation,
+    cancelReservation,
+    addCompany,
+    updateCompany,
+    deleteCompany,
+    addBus,
+    updateBus,
+    deleteBus,
+    addRoute,
+    updateRoute,
+    deleteRoute,
+    addSchedule,
+    updateSchedule,
+    deleteSchedule,
+    addUser,
+    updateUser,
+    deleteUser,
   };
 
   return (
-    <DataContext.Provider value={{
-      companies,
-      buses,
-      routes,
-      schedules,
-      reservations,
-      users,
-      addReservation,
-      cancelReservation,
-      addCompany,
-      updateCompany,
-      deleteCompany,
-      addBus,
-      updateBus,
-      deleteBus,
-      addRoute,
-      updateRoute,
-      deleteRoute,
-      addSchedule,
-      updateSchedule,
-      deleteSchedule,
-      addUser,
-      updateUser,
-      deleteUser
-    }}>
+    <DataContext.Provider value={value}>
       {children}
     </DataContext.Provider>
   );
@@ -183,8 +227,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
 export function useData() {
   const context = useContext(DataContext);
-  if (!context) {
-    throw new Error('useData must be used within DataProvider');
+  if (context === undefined) {
+    throw new Error('useData must be used within a DataProvider');
   }
   return context;
 }

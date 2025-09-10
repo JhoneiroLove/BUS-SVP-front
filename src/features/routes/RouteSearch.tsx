@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, MapPin, Clock, DollarSign, Calendar } from 'lucide-react';
-import { useData } from '../../shared/contexts/DataContext';
+import { routesService, RouteSearchParams } from '../../shared/services/routes';
+import { companiesService } from '../../shared/services/companies';
+import { Route, Company } from '../../shared/types';
 
 interface RouteSearchProps {
   onSelectSchedule: (scheduleId: string) => void;
@@ -11,7 +13,32 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
   const [destination, setDestination] = useState('');
   const [date, setDate] = useState('');
   const [showResults, setShowResults] = useState(false);
-  const { routes, schedules, companies } = useData();
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const [routesData, companiesData] = await Promise.all([
+          routesService.getAllRoutes(),
+          companiesService.getAllCompanies()
+        ]);
+        setRoutes(routesData);
+        setCompanies(companiesData);
+      } catch (err) {
+        setError('Error al cargar los datos');
+        console.error('Error loading initial data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []);
 
   // Filtrar rutas basado en los criterios de búsqueda
   const filteredResults = useMemo(() => {
@@ -23,36 +50,52 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
       const matchesOrigin = !origin || route.origin.toLowerCase().includes(origin.toLowerCase());
       const matchesDestination = !destination || route.destination.toLowerCase().includes(destination.toLowerCase());
       
-      // Si hay filtro de fecha, verificar que existan horarios para esa fecha
-      const matchesDate = !date || schedules.some(schedule => 
-        schedule.routeId === route.id && schedule.date === date
-      );
-      
-      return matchesOrigin && matchesDestination && matchesDate;
+      return matchesOrigin && matchesDestination;
     });
-  }, [routes, schedules, origin, destination, date, showResults]);
+  }, [routes, origin, destination, date, showResults]);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowResults(true);
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const searchParams: RouteSearchParams = {
+        origin: origin || undefined,
+        destination: destination || undefined,
+        date: date || undefined,
+        min_seats: 1
+      };
+      
+      const searchResults = await routesService.searchRoutes(searchParams);
+      setRoutes(searchResults);
+      setShowResults(true);
+    } catch (err) {
+      setError('Error al buscar rutas');
+      console.error('Error searching routes:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const clearSearch = () => {
+  const clearSearch = async () => {
     setOrigin('');
     setDestination('');
     setDate('');
     setShowResults(false);
-  };
-
-  // Obtener horarios filtrados por fecha si se especifica
-  const getFilteredSchedules = (routeId: string) => {
-    const routeSchedules = schedules.filter(s => s.routeId === routeId);
+    setError(null);
     
-    if (date) {
-      return routeSchedules.filter(s => s.date === date);
+    // Recargar todas las rutas
+    try {
+      setLoading(true);
+      const routesData = await routesService.getAllRoutes();
+      setRoutes(routesData);
+    } catch (err) {
+      setError('Error al cargar las rutas');
+      console.error('Error loading routes:', err);
+    } finally {
+      setLoading(false);
     }
-    
-    return routeSchedules;
   };
 
   return (
@@ -113,10 +156,11 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
             <div className="flex items-end space-x-2">
               <button
                 type="submit"
-                className="flex items-center justify-center flex-1 px-4 py-2 space-x-2 text-white transition-colors bg-orange-600 rounded-md hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                disabled={loading}
+                className="flex items-center justify-center flex-1 px-4 py-2 space-x-2 text-white transition-colors bg-orange-600 rounded-md hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Search className="w-5 h-5" />
-                <span>Buscar</span>
+                <span>{loading ? 'Buscando...' : 'Buscar'}</span>
               </button>
               
               {showResults && (
@@ -132,7 +176,13 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
           </div>
         </form>
 
-        {showResults && (
+        {error && (
+          <div className="p-4 mt-4 rounded-md bg-red-50">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        {showResults && !error && (
           <div className="p-4 mt-4 rounded-md bg-orange-50">
             <p className="text-sm text-orange-800">
               Mostrando {filteredResults.length} resultado(s) 
@@ -146,13 +196,7 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
 
       <div className="space-y-4">
         {filteredResults.map(route => {
-          const company = companies.find(c => c.id === route.companyId);
-          const routeSchedules = getFilteredSchedules(route.id);
-          
-          // No mostrar rutas sin horarios disponibles si se filtró por fecha
-          if (date && routeSchedules.length === 0) {
-            return null;
-          }
+          const company = companies.find(c => c.id === route.company_id);
           
           return (
             <div key={route.id} className="p-6 bg-white rounded-lg shadow-md">
@@ -162,6 +206,9 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
                     {route.origin} → {route.destination}
                   </h3>
                   <p className="text-gray-600">{company?.name}</p>
+                  {route.description && (
+                    <p className="text-sm text-gray-500 mt-1">{route.description}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="flex items-center mb-1 text-gray-600">
@@ -170,54 +217,41 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
                   </div>
                   <div className="flex items-center font-semibold text-orange-600">
                     <DollarSign className="w-4 h-4 mr-1" />
-                    <span>${route.price}</span>
+                    <span>S/ {route.price}</span>
                   </div>
+                  {route.distance_km && (
+                    <div className="text-sm text-gray-500 mt-1">
+                      {route.distance_km} km
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {routeSchedules.length > 0 ? (
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  {routeSchedules.map(schedule => (
-                    <div
-                      key={schedule.id}
-                      className="p-3 transition-colors border border-gray-200 rounded-md hover:border-orange-300"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium">{schedule.departureTime}</span>
-                        <span className="text-sm text-gray-600">→ {schedule.arrivalTime}</span>
-                      </div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-600">{schedule.date}</span>
-                        <span className="text-sm text-gray-600">
-                          {schedule.availableSeats} asientos
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => onSelectSchedule(schedule.id)}
-                        disabled={schedule.availableSeats === 0}
-                        className={`w-full px-3 py-1 rounded text-sm transition-colors ${
-                          schedule.availableSeats === 0
-                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            : 'bg-orange-600 text-white hover:bg-orange-700'
-                        }`}
-                      >
-                        {schedule.availableSeats === 0 ? 'Sin asientos' : 'Seleccionar'}
-                      </button>
-                    </div>
-                  ))}
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">{route.total_bookings}</span> reservas realizadas
                 </div>
-              ) : (
-                <div className="py-4 text-center text-gray-500">
-                  <p>No hay horarios disponibles para esta ruta</p>
-                  {date && <p className="text-sm">Intenta con otra fecha</p>}
-                </div>
-              )}
+                <button
+                  onClick={() => onSelectSchedule(route.id)}
+                  className="px-6 py-2 text-white transition-colors bg-orange-600 rounded-md hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                >
+                  Ver Horarios
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {filteredResults.length === 0 && showResults && (
+      {loading && (
+        <div className="p-12 text-center bg-white rounded-lg shadow-md">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <h3 className="mb-2 text-lg font-medium text-gray-900">Cargando rutas...</h3>
+          <p className="text-gray-600">Por favor espera mientras buscamos las mejores opciones</p>
+        </div>
+      )}
+
+      {!loading && filteredResults.length === 0 && showResults && (
         <div className="p-12 text-center bg-white rounded-lg shadow-md">
           <Search className="w-12 h-12 mx-auto mb-4 text-gray-400" />
           <h3 className="mb-2 text-lg font-medium text-gray-900">No se encontraron rutas</h3>
@@ -233,7 +267,7 @@ export function RouteSearch({ onSelectSchedule }: RouteSearchProps) {
         </div>
       )}
 
-      {!showResults && filteredResults.length === 0 && (
+      {!loading && !showResults && filteredResults.length === 0 && (
         <div className="p-12 text-center bg-white rounded-lg shadow-md">
           <Search className="w-12 h-12 mx-auto mb-4 text-gray-400" />
           <h3 className="mb-2 text-lg font-medium text-gray-900">Busca tu viaje ideal</h3>
